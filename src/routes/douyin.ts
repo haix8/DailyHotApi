@@ -1,7 +1,6 @@
 import type { RouterData } from "../types.js";
 import { get } from "../utils/getData.js";
 import { getTime } from "../utils/getTime.js";
-import { randomUUID } from "node:crypto";
 
 export const handleRoute = async (_: undefined, noCache: boolean) => {
   const listData = await getList(noCache);
@@ -39,15 +38,18 @@ const getList = async (noCache: boolean) => {
     url,
     noCache,
     headers: {
-      Cookie: `passport_csrf_token=${randomUUID()}`,
+      Cookie: `passport_csrf_token=${crypto.randomUUID()}`,
     },
   });
   const responseData = result.data;
-  const list = responseData?.data?.word_list;
-  if (responseData?.status_code !== 0) {
-    const reason = responseData?.status_msg || `status_code=${responseData?.status_code}`;
+  if (!responseData) {
+    throw new Error("获取抖音热榜失败: 响应数据为空");
+  }
+  if (responseData.status_code !== 0) {
+    const reason = responseData.status_msg || `status_code=${responseData.status_code}`;
     throw new Error(`获取抖音热榜失败: ${reason}`);
   }
+  const list = responseData.data?.word_list;
   if (!Array.isArray(list) || list.length === 0) {
     throw new Error("获取抖音热榜失败: word_list 缺失或为空");
   }
