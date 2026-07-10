@@ -1,6 +1,7 @@
 import type { RouterData } from "../types.js";
 import { get } from "../utils/getData.js";
 import { getTime } from "../utils/getTime.js";
+import { randomUUID } from "node:crypto";
 
 export const handleRoute = async (_: undefined, noCache: boolean) => {
   const listData = await getList(noCache);
@@ -16,27 +17,6 @@ export const handleRoute = async (_: undefined, noCache: boolean) => {
   return routeData;
 };
 
-interface DyCookieResponse {
-  headers: {
-    "set-cookie": string[];
-  };
-}
-
-// 获取抖音临时 Cookis
-const getDyCookies = async () => {
-  try {
-    const cookisUrl = "https://www.douyin.com/passport/general/login_guiding_strategy/?aid=6383";
-    const { data } = await get<DyCookieResponse>({ url: cookisUrl, originaInfo: true });
-    const pattern = /passport_csrf_token=(.*); Path/s;
-    const matchResult = data.headers["set-cookie"][0].match(pattern);
-    const cookieData = matchResult![1];
-    return cookieData;
-  } catch (error) {
-    console.error("获取抖音 Cookie 出错" + error);
-    return undefined;
-  }
-};
-
 interface DouyinWordItem {
   sentence_id: string;
   word: string;
@@ -45,23 +25,32 @@ interface DouyinWordItem {
 }
 
 interface DouyinResponse {
-  data: {
-    word_list: DouyinWordItem[];
+  status_code: number;
+  status_msg?: string;
+  data?: {
+    word_list?: DouyinWordItem[];
   };
 }
 
 const getList = async (noCache: boolean) => {
   const url =
     "https://www.douyin.com/aweme/v1/web/hot/search/list/?device_platform=webapp&aid=6383&channel=channel_pc_web&detail_list=1";
-  const cookie = await getDyCookies();
   const result = await get<DouyinResponse>({
     url,
     noCache,
     headers: {
-      Cookie: `passport_csrf_token=${cookie}`,
+      Cookie: `passport_csrf_token=${randomUUID()}`,
     },
   });
-  const list = result.data.data.word_list;
+  const responseData = result.data;
+  const list = responseData?.data?.word_list;
+  if (responseData?.status_code !== 0) {
+    const reason = responseData?.status_msg || `status_code=${responseData?.status_code}`;
+    throw new Error(`获取抖音热榜失败: ${reason}`);
+  }
+  if (!Array.isArray(list) || list.length === 0) {
+    throw new Error("获取抖音热榜失败: word_list 缺失或为空");
+  }
   return {
     ...result,
     data: list.map((v) => ({
